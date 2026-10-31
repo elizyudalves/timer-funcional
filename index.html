@@ -9,14 +9,14 @@
 <label>Descanso entre rondas (seg)<input id="rest" type="number" min="0" max="3600" value="60"></label>
 <label>Exercícios por ronda<input id="rounds" type="number" min="1" max="100" value="7"></label>
 <label>Ciclos<input id="cycles" type="number" min="1" max="100" value="4"></label>
-<label>Contagem por voz (seg antes do fim)<input id="warning" type="number" min="1" max="30" value="3"></label></div><p style="font:14px Arial">A voz conta os segundos finais de cada exercício, a partir do valor escolhido.</p><p><label style="font-family:Arial"><input type="checkbox" id="voice" checked> Ativar voz em português</label></p><p style="font:15px Arial;line-height:2;text-align:left"><label><input type="checkbox" id="ticks" checked> Tique-taque em todas as etapas</label><br><label><input type="checkbox" id="bells" checked> Sino no início de cada etapa</label><br><label><input type="checkbox" id="countVoice" checked> Contagem final por voz no exercício</label><br><label><input type="checkbox" id="keepScreen" checked> Manter a tela ligada durante o treino</label></p><button id="save">SALVAR E REINICIAR</button></section>
+<label>Contagem por voz (seg antes do fim)<input id="warning" type="number" min="1" max="30" value="3"></label></div><p style="font:14px Arial">A voz conta os segundos finais de cada exercício, a partir do valor escolhido.</p><p><label style="font-family:Arial"><input type="checkbox" id="voice" checked> Ativar voz em português</label></p><p style="font:15px Arial;line-height:2;text-align:left"><label><input type="checkbox" id="ticks" checked> Tique-taque forte em todas as etapas</label><br><label><input type="checkbox" id="cheer" checked> Voz “VAI!” no início de cada exercício</label><br><label><input type="checkbox" id="countVoice" checked> Contagem final por voz no exercício</label><br><label><input type="checkbox" id="keepScreen" checked> Manter a tela ligada durante o treino</label></p><button id="save">SALVAR E REINICIAR</button></section>
 <section class="stage" id="stage"><h1 id="phase">PREPARAR</h1><div class="clock" id="clock">00:10</div></section><section class="next"><span id="nextLabel">EXERCÍCIO</span><div id="nextTime">00:38</div></section>
 <section class="bottom"><div class="stat"><b id="roundLeft">7</b><small>EXERCÍCIOS PARA TERMINAR</small></div><button class="play" id="play" aria-label="Iniciar ou pausar">▶</button><div class="stat"><b id="cycleLeft">4</b><small>CICLOS PARA TERMINAR</small></div></section>
-<div class="controls"><button id="reset">↻ Reiniciar</button><button id="testSounds">🔔 Testar sons</button><button id="testVoice">🗣 Testar voz</button></div><p class="hint"><b>VERSÃO 6 · VOZ + TIQUE-TAQUE + SINO</b></p><p id="audioStatus" class="hint" role="status">Antes da aula, teste os sons e a voz. Confira o volume de mídia e a saída Bluetooth.</p><p id="screenStatus" class="hint" role="status">Tela: aguardando início do treino.</p><p class="hint">O sino toca no início da preparação, exercício, troca e descanso. O tique-taque acompanha os segundos de todas as etapas. A voz anuncia as etapas e pode contar os segundos finais do exercício. Ao iniciar, o timer solicita que a tela fique ligada; confira a confirmação acima. Se sair do Safari ou bloquear a tela, o treino pausa.</p>
+<div class="controls"><button id="reset">↻ Reiniciar</button><button id="testSounds">🔊 Testar tique-taque</button><button id="testCheer">📣 Testar VAI!</button><button id="testVoice">🗣 Testar voz</button></div><p class="hint"><b>VERSÃO 7 · TIQUE-TAQUE FORTE + VAI!</b></p><p id="audioStatus" class="hint" role="status">Antes da aula, teste os sons e a voz. Confira o volume de mídia e a saída Bluetooth.</p><p id="screenStatus" class="hint" role="status">Tela: aguardando início do treino.</p><p class="hint">A voz diz “VAI!” no início de cada exercício, com entonação mais enfática conforme a voz disponível no aparelho. O tique-taque acompanha os segundos de todas as etapas. A voz anuncia as etapas e pode contar os segundos finais do exercício. Ao iniciar, o timer solicita que a tela fique ligada; confira a confirmação acima. Se sair do Safari ou bloquear a tela, o treino pausa.</p>
 <script>
 const $=id=>document.getElementById(id);
 const ids=['prep','work','change','rest','rounds','cycles','warning'];
-const switches=['voice','ticks','bells','countVoice','keepScreen'];
+const switches=['voice','ticks','cheer','countVoice','keepScreen'];
 let cfg={},steps=[],idx=0,remaining=0,playing=false,endAt=0,timer=null,lastSecond=null,spokenUtterance=null;
 const warned=new Set();
 let audio=null,master=null,nodes=new Set(),soundGeneration=0;
@@ -27,7 +27,7 @@ function unlockSound(){
   if(!audio||audio.state==='closed'){
    const Context=window.AudioContext||window.webkitAudioContext;
    if(!Context)throw Error('unavailable');
-   audio=new Context();master=audio.createGain();master.gain.value=.7;master.connect(audio.destination);
+   audio=new Context();master=audio.createGain();master.gain.value=.9;master.connect(audio.destination);
   }
   const generation=soundGeneration;
   // Called synchronously from the tap. Do not await this before speaking.
@@ -44,17 +44,15 @@ function tone(freq,start,duration,volume,type='sine'){
  g.gain.setValueAtTime(.0001,start);g.gain.exponentialRampToValueAtTime(volume,start+.003);g.gain.exponentialRampToValueAtTime(.0001,start+duration);
  o.connect(g);g.connect(master);nodes.add(o);o.onended=()=>{nodes.delete(o);o.disconnect();g.disconnect()};o.start(start);o.stop(start+duration+.01);
 }
+function tickSound(second,start){
+ // A longer, stronger pulse with a second short attack makes the beat distinct.
+ tone(second%2?1500:1050,start,.11,.52,'square');
+ tone(second%2?900:700,start+.025,.045,.20,'triangle');
+}
 function clockTick(second){
  if(!$('ticks').checked)return;
  if(!audio||audio.state!=='running'){setAudioStatus('O áudio foi interrompido. Pause e toque em ▶ para reativar.');return}
- tone(second%2?1500:1050,audio.currentTime,.045,.22,'triangle');
-}
-function ring(){
- if(!$('bells').checked)return;
- if(!audio||audio.state!=='running'){setAudioStatus('Sons não ativados. Toque em Testar sons antes de começar.');return}
- const t=audio.currentTime;
- // Inharmonic partials and closely spaced strikes give a metallic ring.
- for(const delay of [0,.13])for(const [freq,amp] of [[740,.20],[1210,.13],[1845,.09],[2600,.045]])tone(freq,t+delay,.52,amp);
+ tickSound(second,audio.currentTime);
 }
 function stopSounds(){soundGeneration++;for(const o of nodes){try{o.stop()}catch(e){}}nodes.clear()}
 let wake=null,wakePending=null,wakeGeneration=0;
@@ -81,23 +79,25 @@ function fmt(n){n=Math.max(0,Math.ceil(n));return String(Math.floor(n/60)).padSt
 function lockConfig(on){for(const id of ids)$(id).disabled=on;$('save').disabled=on}
 function setup(){playing=false;clearInterval(timer);stopSounds();releaseScreen();if(window.speechSynthesis)window.speechSynthesis.cancel();cfg=getCfg();makeSteps();warned.clear();idx=0;remaining=steps[0].secs;lastSecond=null;lockConfig(false);$('play').textContent='▶';render()}
 function render(){const s=steps[idx],n=steps[idx+1];$('phase').textContent=s.type;$('clock').textContent=fmt(remaining);$('nextLabel').textContent=n?n.type:'FIM';$('nextTime').textContent=n?fmt(n.secs):'00:00';$('stage').style.background={PREPARAR:'#ffff35','EXERCÍCIO':'#99ff36',TROCA:'#42b3e8',DESCANSO:'#ff9f3e',FINALIZADO:'#ffff35'}[s.type];$('roundLeft').textContent=s.type==='FINALIZADO'?0:cfg.rounds-s.r;$('cycleLeft').textContent=s.type==='FINALIZADO'?0:cfg.cycles-s.c;$('total').textContent=fmt(remaining+steps.slice(idx+1).reduce((a,s)=>a+s.secs,0))}
-function speak(phrase,countdown=false){if(!$('voice').checked)return;if(!window.speechSynthesis){setAudioStatus('Voz indisponível. Abra no Safari.');return}try{const synth=window.speechSynthesis;synth.cancel();const u=new SpeechSynthesisUtterance(phrase);spokenUtterance=u;u.lang='pt-BR';u.rate=countdown?1.3:1;u.volume=1;const voices=synth.getVoices();const voice=voices.find(v=>v.lang.toLowerCase()==='pt-br')||voices.find(v=>v.lang.toLowerCase().startsWith('pt'));if(voice)u.voice=voice;u.onerror=e=>{if(!['canceled','interrupted'].includes(e.error))setAudioStatus('A voz não iniciou ('+e.error+'). Toque em Testar voz.')};synth.speak(u);if(synth.paused)synth.resume()}catch(e){setAudioStatus('Falha na voz. Toque em Testar voz no Safari.')}}
-function announce(){speak({PREPARAR:'Preparar','EXERCÍCIO':'Exercício',TROCA:'Trocar exercício',DESCANSO:'Descansar',FINALIZADO:'Treino finalizado'}[steps[idx].type])}
+function speak(phrase,countdown=false,emphatic=false){if(!emphatic&&!$('voice').checked)return;if(!window.speechSynthesis){setAudioStatus('Voz indisponível. Abra no Safari.');return}try{const synth=window.speechSynthesis;synth.cancel();const u=new SpeechSynthesisUtterance(phrase);spokenUtterance=u;u.lang='pt-BR';u.rate=emphatic?.9:countdown?1.3:1;u.pitch=emphatic?1.2:1;u.volume=1;const voices=synth.getVoices();const voice=voices.find(v=>v.lang.toLowerCase()==='pt-br')||voices.find(v=>v.lang.toLowerCase().startsWith('pt'));if(voice)u.voice=voice;u.onerror=e=>{if(!['canceled','interrupted'].includes(e.error))setAudioStatus('A voz não iniciou ('+e.error+'). Toque em Testar voz.')};synth.speak(u);if(synth.paused)synth.resume()}catch(e){setAudioStatus('Falha na voz. Toque em Testar voz no Safari.')}}
+function announce(resuming=false){
+ if(steps[idx].type==='EXERCÍCIO'&&$('cheer').checked&&!resuming){speak('VAI!',false,true);return}
+ speak({PREPARAR:'Preparar','EXERCÍCIO':resuming?'Continuar':'Exercício',TROCA:'Trocar exercício',DESCANSO:'Descansar',FINALIZADO:'Treino finalizado'}[steps[idx].type]);
+}
 function warning(){const sec=Math.ceil(remaining),key=idx+':'+sec;if($('countVoice').checked&&steps[idx].type==='EXERCÍCIO'&&sec>0&&sec<=cfg.warning&&!warned.has(key)){warned.add(key);speak(String(sec),true)}}
 function finish(){playing=false;remaining=0;clearInterval(timer);stopSounds();releaseScreen();lockConfig(false);$('play').textContent='▶';announce();render()}
-function update(){if(!playing)return;const now=performance.now();let changed=false;while(now>=endAt&&idx<steps.length-1){idx++;changed=true;if(steps[idx].type==='FINALIZADO'){finish();return}endAt+=steps[idx].secs*1000}remaining=Math.max(0,(endAt-now)/1000);const sec=Math.ceil(remaining);if(changed){lastSecond=sec;announce();ring()}else if(sec!==lastSecond){lastSecond=sec;if(sec>0){clockTick(sec);warning()}}render()}
+function update(){if(!playing)return;const now=performance.now();let changed=false;while(now>=endAt&&idx<steps.length-1){idx++;changed=true;if(steps[idx].type==='FINALIZADO'){finish();return}endAt+=steps[idx].secs*1000}remaining=Math.max(0,(endAt-now)/1000);const sec=Math.ceil(remaining);if(changed){lastSecond=sec;announce()}else if(sec!==lastSecond){lastSecond=sec;if(sec>0){clockTick(sec);warning()}}render()}
 function pause(reason){if(!playing)return;update();if(!playing)return;playing=false;clearInterval(timer);stopSounds();releaseScreen();if(window.speechSynthesis)window.speechSynthesis.cancel();$('play').textContent='▶';lockConfig(false);if(reason)setAudioStatus(reason);render()}
 $('play').onclick=()=>{
  if(playing){pause();return}
  if(steps[idx].type==='FINALIZADO')setup();
  const initial=lastSecond===null;playing=true;lockConfig(true);$('play').textContent='Ⅱ';endAt=performance.now()+remaining*1000;lastSecond=Math.ceil(remaining);
- const stage=idx,generation=soundGeneration;
- const ready=unlockSound();announce(); // Keep speech inside the original tap, never after await.
- ready.then(ok=>{if(ok&&playing&&idx===stage&&soundGeneration===generation&&initial)ring()});
+ unlockSound();announce(!initial); // Keep speech inside the original tap, never after await.
  requestScreen();clearInterval(timer);timer=setInterval(update,50);render();
 };
-$('testVoice').onclick=()=>{pause();$('voice').checked=true;speak('Preparar. Exercício. Três. Dois. Um. Trocar exercício. Descansar. Treino finalizado.')};
-$('testSounds').onclick=()=>{pause();$('ticks').checked=true;$('bells').checked=true;const generation=soundGeneration;unlockSound().then(ok=>{if(!ok||generation!==soundGeneration)return;ring();for(const [delay,freq]of [[1,1500],[2,1050],[3,1500]])tone(freq,audio.currentTime+delay,.045,.22,'triangle');setAudioStatus('Teste: sino e três tiques. Se não ouvir, confira volume, modo silencioso e saída Bluetooth.')})};
+$('testVoice').onclick=()=>{pause();$('voice').checked=true;speak('Preparar. VAI! Três. Dois. Um. Trocar exercício. Descansar. Treino finalizado.')};
+$('testSounds').onclick=()=>{pause();$('ticks').checked=true;const generation=soundGeneration;unlockSound().then(ok=>{if(!ok||generation!==soundGeneration)return;for(let i=0;i<4;i++)tickSound(i,audio.currentTime+i);setAudioStatus('Teste: quatro tiques fortes. O volume final depende do volume de mídia e da saída Bluetooth.')})};
+$('testCheer').onclick=()=>{pause();$('cheer').checked=true;speak('VAI!',false,true)};
 $('keepScreen').onchange=()=>{$('keepScreen').checked?requestScreen():releaseScreen()};
 $('reset').onclick=$('resetTop').onclick=setup;
 $('config').onclick=()=>{if(playing)pause();$('settings').classList.toggle('open')};
